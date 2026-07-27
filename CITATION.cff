@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Configural Psychometrics: R and C++ engines for identifying minimally sufficient conditions"
+abstract: >-
+  Working R and C++ engines for the configural psychometrics framework:
+  exhaustive (enumerate_msc) and constructive (pairmi) construction of the
+  minimally sufficient sets for a target, with necessity, dispensability,
+  and coverage diagnostics.
+type: software
+authors:
+  - family-names: Fisher
+    given-names: Aaron J.
+    orcid: "https://orcid.org/0000-0001-9754-4618"
+# If these engines carry code forward from the original setweaver package,
+# add the co-author by uncommenting:
+#  - family-names: Leenaerts
+#    given-names: Nicolas
+version: "1.0.0"
+date-released: "2026-07-27"
+doi: "10.5281/zenodo.21633129"
+license: GPL-3.0-or-later
+url: "https://github.com/fisher-berkeley/configural-psychometrics"
+repository-code: "https://github.com/fisher-berkeley/configural-psychometrics"
+keywords:
+  - configural psychometrics
+  - minimally sufficient conditions
+  - psychopathology
+  - set theory
+  - R
+  - Rcpp

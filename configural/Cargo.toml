@@ -9,4 +9,5 @@ description = "Configural psychometrics: binary matrix validation and column-maj
 libm = "0.2"
 
 [dev-dependencies]
-serde_json = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

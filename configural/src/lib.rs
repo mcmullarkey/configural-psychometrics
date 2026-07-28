@@ -14,6 +14,9 @@
 //! - [`exhaustive`] — exhaustive lattice ascent via Apriori ordered extension.
 //! - [`cell_eval`] — cell evaluation + greedy antichain reduction (Wilson/point gates).
 //! - [`cell`] — unified Cell representation + adapters from both engines.
+//! - [`satisfaction`] — satisfaction matrix primitive (S[p][k] = all elements
+//!   in member k present in row p).
+//! - [`coverage`] — coverage: share of cases satisfying ≥1 antichain member.
 //!
 //! ## What this crate does NOT provide
 //!
@@ -29,16 +32,20 @@
 pub mod bitset;
 pub mod cell;
 pub mod cell_eval;
+pub mod coverage;
 pub mod error;
 pub mod exhaustive;
 pub mod matrix;
 pub mod pairmi;
+pub mod satisfaction;
 pub mod stats;
 
 pub use cell::{from_exhaustive, from_pairmi, Cell, CellMeta, CellSource};
 pub use cell_eval::{evaluate_cell, CellOutput, CellRow, Criterion, Detail};
+pub use coverage::{coverage, CoverageResult};
 pub use error::ConfiguralError;
 pub use exhaustive::{AscentResult, EmscStore};
 pub use matrix::BinaryMatrix;
 pub use pairmi::{DepthStats, EvaluationMode, PairMiEngine, PairMiResultRow};
+pub use satisfaction::satisfaction_matrix;
 pub use stats::GTestResult;

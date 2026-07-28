@@ -22,6 +22,8 @@
 
 pub mod error;
 pub mod matrix;
+pub mod stats;
 
 pub use error::ConfiguralError;
 pub use matrix::BinaryMatrix;
+pub use stats::GTestResult;

@@ -6,3 +6,8 @@ license = "GPL-3.0"
 description = "Configural psychometrics: binary matrix validation and column-major packed-bit storage"
 
 [dependencies]
+libm = "0.2"
+
+[dev-dependencies]
+approx = "0.5"
+serde_json = "1.0"

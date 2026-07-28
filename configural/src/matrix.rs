@@ -30,7 +30,7 @@
 /// [`EmptyMatrix`]: crate::ConfiguralError::EmptyMatrix
 /// [`VocabularyTooLarge`]: crate::ConfiguralError::VocabularyTooLarge
 /// [`NonBinaryValue`]: crate::ConfiguralError::NonBinaryValue
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BinaryMatrix {
     /// Packed column-major bits. See type docs for layout.
     bits: Vec<u64>,
@@ -303,5 +303,16 @@ mod tests {
         assert_eq!(m.as_bits().len(), 2); // 2 columns × 1 word each
         assert_eq!(m.as_bits()[0], 0b001); // column 0: row 0 set
         assert_eq!(m.as_bits()[1], 0b110); // column 1: rows 1,2 set
+    }
+
+    #[test]
+    fn equality_semantics() {
+        // PartialEq enables downstream ACs to compare matrices directly.
+        // Without the derive, assert_eq! would not compile.
+        let a = BinaryMatrix::new(&[0.0, 1.0, 1.0, 0.0], 2, 2).unwrap();
+        let b = BinaryMatrix::new(&[0.0, 1.0, 1.0, 0.0], 2, 2).unwrap();
+        let c = BinaryMatrix::new(&[1.0, 0.0, 0.0, 1.0], 2, 2).unwrap();
+        assert_eq!(a, b, "matrices with same data should be equal");
+        assert_ne!(a, c, "matrices with different data should not be equal");
     }
 }

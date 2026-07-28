@@ -20,6 +20,7 @@
 //! `[j*nwords, (j+1)*nwords)` where `nwords = (n_rows + 63) / 64`.
 //! Bit `(r, c)` lives at word `c*nwords + r/64`, bit `r%64`.
 
+pub mod bitset;
 pub mod error;
 pub mod matrix;
 

@@ -286,4 +286,22 @@ mod tests {
             }
         );
     }
+
+    // ---- Layout contract ----
+
+    #[test]
+    fn as_bits_column_major_layout() {
+        // 3 rows × 2 cols: data = [1,0, 0,1, 0,1] (row-major input)
+        // Column 0 = [1,0,0] → bit 0 set → word = 0b001 = 1
+        // Column 1 = [0,1,1] → bits 1,2 set → word = 0b110 = 6
+        //
+        // This test pins the column-major packed-bit layout documented in the
+        // struct-level docs. A row-major refactor that keeps get() correct
+        // would silently break as_bits() — this test catches that.
+        let m = BinaryMatrix::new(&[1.0, 0.0, 0.0, 1.0, 0.0, 1.0], 3, 2)
+            .expect("valid 3x2 matrix");
+        assert_eq!(m.as_bits().len(), 2); // 2 columns × 1 word each
+        assert_eq!(m.as_bits()[0], 0b001); // column 0: row 0 set
+        assert_eq!(m.as_bits()[1], 0b110); // column 1: rows 1,2 set
+    }
 }

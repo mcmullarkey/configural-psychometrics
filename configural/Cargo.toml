@@ -7,6 +7,7 @@ description = "Configural psychometrics: binary matrix validation and column-maj
 
 [dependencies]
 libm = "0.2"
+rayon = "1"
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

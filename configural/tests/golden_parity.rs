@@ -52,12 +52,10 @@ fn load_fixtures() -> Option<Vec<Value>> {
     if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
             if entry.path().extension().is_some_and(|e| e == "json") {
-                let content = fs::read_to_string(entry.path()).unwrap_or_else(|e| {
-                    panic!("failed to read fixture {:?}: {e}", entry.path())
-                });
-                let parsed: Value = serde_json::from_str(&content).unwrap_or_else(|e| {
-                    panic!("failed to parse JSON in {:?}: {e}", entry.path())
-                });
+                let content = fs::read_to_string(entry.path())
+                    .unwrap_or_else(|e| panic!("failed to read fixture {:?}: {e}", entry.path()));
+                let parsed: Value = serde_json::from_str(&content)
+                    .unwrap_or_else(|e| panic!("failed to parse JSON in {:?}: {e}", entry.path()));
                 fixtures.push(parsed);
             }
         }

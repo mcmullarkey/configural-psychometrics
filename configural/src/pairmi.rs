@@ -38,6 +38,7 @@ use crate::bitset::{and_popcount, extract_members};
 use crate::matrix::BinaryMatrix;
 use crate::stats::{chi2_sf_df1, mi_2x2};
 use crate::ConfiguralError;
+use rayon::prelude::*;
 use std::collections::HashSet;
 
 /// Significance test mode for retaining sets.
@@ -90,6 +91,25 @@ pub struct DepthStats {
     pub unique: u64,
     /// Sets retained (first-significant).
     pub kept: u64,
+}
+
+/// Per-parent retained set from parallel depth≥3 processing.
+struct ParentRetained {
+    vmask: u64,
+    pop: u32,
+    var: u32,
+    parent: u32,
+    mi: f64,
+    relmi: f64,
+    p: f64,
+    bits: Vec<u64>,
+}
+
+/// Per-parent results collected from parallel tasks.
+struct ParentResult {
+    retained: Vec<ParentRetained>,
+    all_v_masks: Vec<u64>,
+    raw: u64,
 }
 
 /// Constructive ascent engine.
@@ -277,6 +297,7 @@ impl PairMiEngine {
             }
         } else {
             // Depth ≥3: expand.grid (outer prev, inner orig).
+            // Parallelized: each parent set p is independent.
             if self.prev_end <= self.prev_start {
                 return DepthStats {
                     raw: 0,
@@ -285,56 +306,101 @@ impl PairMiEngine {
                 };
             }
 
-            let mut seen_all: HashSet<u64> = HashSet::new();
-            let mut seen_kept: HashSet<u64> = HashSet::new();
-            let mut scratch = vec![0u64; w];
+            let prev_start = self.prev_start;
 
-            for p in self.prev_start..self.prev_end {
-                let pv = self.set_vmask[p];
-                let ppop = self.set_pop[p];
-                let pmi = self.set_mi[p];
+            // Extract parent data into owned Vec for parallel processing.
+            // This avoids borrowing self.set_* inside the parallel closure.
+            let parent_data: Vec<(u64, u32, f64, Vec<u64>)> = (self.prev_start..self.prev_end)
+                .map(|p| {
+                    (
+                        self.set_vmask[p],
+                        self.set_pop[p],
+                        self.set_mi[p],
+                        self.set_bits[p * w..(p + 1) * w].to_vec(),
+                    )
+                })
+                .collect();
 
-                // Copy parent bits to scratch. This prevents a dangling
-                // pointer after set_bits realloc (matching pairmi_v5.cpp:211).
-                // In Rust the borrow checker would catch a dangling slice,
-                // but the copy is still needed because set_bits is mutated
-                // inside the inner loop (push/resize invalidate any slice
-                // borrowed from it).
-                scratch[..w].copy_from_slice(&self.set_bits[p * w..(p + 1) * w]);
+            // Parallel: each parent gets per-thread scratch + per-thread HashSet.
+            // Results collected in parent order (rayon preserves order).
+            let results: Vec<ParentResult> = (0..parent_data.len())
+                .into_par_iter()
+                .map(|i| {
+                    let p = prev_start + i;
+                    let (pv, ppop, pmi, parent_bits) = &parent_data[i];
 
-                for j in 0..v {
-                    if pv & (1u64 << j) != 0 {
-                        continue; // overlap filter
+                    // Per-thread scratch — no sharing across parents.
+                    let mut all_v_masks: Vec<u64> = Vec::new();
+                    let mut local_seen_kept: HashSet<u64> = HashSet::new();
+                    let mut retained: Vec<ParentRetained> = Vec::new();
+                    let mut raw_local = 0u64;
+
+                    for j in 0..v {
+                        if pv & (1u64 << j) != 0 {
+                            continue; // overlap filter
+                        }
+                        raw_local += 1;
+                        let vm = pv | (1u64 << j);
+                        all_v_masks.push(vm);
+
+                        if local_seen_kept.contains(&vm) {
+                            continue; // already retained within this thread
+                        }
+
+                        let n11 = and_popcount(parent_bits, &orig_bits[j * w..(j + 1) * w]);
+                        let mi = mi_2x2(n11 as f64, orig_pop[j] as f64, *ppop as f64, n_f);
+                        let pval = g_test_p(n11 as f64, n_f, mi);
+
+                        if should_keep(mode, mi, pval) {
+                            let mut bits = vec![0u64; w];
+                            for word in 0..w {
+                                bits[word] = parent_bits[word] & orig_bits[j * w + word];
+                            }
+                            retained.push(ParentRetained {
+                                vmask: vm,
+                                pop: n11,
+                                var: j as u32,
+                                parent: p as u32,
+                                mi,
+                                relmi: mi - pmi,
+                                p: pval,
+                                bits,
+                            });
+                            local_seen_kept.insert(vm);
+                        }
                     }
-                    raw += 1;
-                    let vm = pv | (1u64 << j);
-                    if seen_all.insert(vm) {
+
+                    ParentResult {
+                        retained,
+                        all_v_masks,
+                        raw: raw_local,
+                    }
+                })
+                .collect();
+
+            // Merge results in parent order (preserves first-significant semantics).
+            // Global dedup: first retained set for each canonical set wins.
+            let mut global_seen_kept: HashSet<u64> = HashSet::new();
+            let mut global_seen_all: HashSet<u64> = HashSet::new();
+
+            for result in &results {
+                raw += result.raw;
+                for &vm in &result.all_v_masks {
+                    if global_seen_all.insert(vm) {
                         unique += 1;
                     }
-                    if seen_kept.contains(&vm) {
-                        continue; // already have first significant
-                    }
-
-                    let n11 = and_popcount(&scratch, &orig_bits[j * w..(j + 1) * w]);
-                    let mi = mi_2x2(n11 as f64, orig_pop[j] as f64, ppop as f64, n_f);
-                    let pval = g_test_p(n11 as f64, n_f, mi);
-
-                    if should_keep(mode, mi, pval) {
-                        // Materialize conjunction: scratch & orig_bits[j].
-                        let off = self.set_bits.len();
-                        self.set_bits.resize(off + w, 0);
-                        for word in 0..w {
-                            self.set_bits[off + word] = scratch[word] & orig_bits[j * w + word];
-                        }
-                        self.set_vmask.push(vm);
-                        self.set_pop.push(n11);
+                }
+                for ret in &result.retained {
+                    if global_seen_kept.insert(ret.vmask) {
+                        self.set_bits.extend_from_slice(&ret.bits);
+                        self.set_vmask.push(ret.vmask);
+                        self.set_pop.push(ret.pop);
                         self.set_depth.push(depth);
-                        self.set_var.push(j as u32);
-                        self.set_parent.push(p as u32);
-                        self.set_mi.push(mi);
-                        self.set_relmi.push(mi - pmi);
-                        self.set_p.push(pval);
-                        seen_kept.insert(vm);
+                        self.set_var.push(ret.var);
+                        self.set_parent.push(ret.parent);
+                        self.set_mi.push(ret.mi);
+                        self.set_relmi.push(ret.relmi);
+                        self.set_p.push(ret.p);
                         kept += 1;
                     }
                 }

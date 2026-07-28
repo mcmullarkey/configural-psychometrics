@@ -1,16 +1,33 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
-     Running unittests src/lib.rs (target/debug/deps/configural-ea2d5bb835c7861f)
+   Compiling configural v0.1.0 (/Users/carbonite/Documents/coding/portfolio/configural-psychometrics/configural)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.59s
+     Running unittests src/lib.rs (configural/target/debug/deps/configural-ea2d5bb835c7861f)
 
-running 9 tests
-test matrix::tests::negative_dimension_mismatch ... ok
+running 11 tests
 test matrix::tests::negative_empty_matrix ... ok
+test matrix::tests::as_bits_column_major_layout ... ok
+test matrix::tests::equality_semantics ... ok
 test matrix::tests::negative_value_2 ... ok
+test matrix::tests::negative_dimension_mismatch ... ok
 test matrix::tests::negative_value_half ... ok
-test matrix::tests::negative_value_nan ... ok
 test matrix::tests::negative_value_infinity ... ok
+test matrix::tests::negative_value_nan ... ok
 test matrix::tests::negative_zero_passes ... ok
-test matrix::tests::positive_2x2_roundtrip ... ok
 test matrix::tests::negative_vocabulary_too_large ... ok
+test matrix::tests::positive_2x2_roundtrip ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/smoke.rs (configural/target/debug/deps/smoke-810989a12eadbc1f)
+
+running 2 tests
+test public_api_error_visibility ... ok
+test public_api_smoke ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests configural
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 

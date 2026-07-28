@@ -298,8 +298,7 @@ mod tests {
         // This test pins the column-major packed-bit layout documented in the
         // struct-level docs. A row-major refactor that keeps get() correct
         // would silently break as_bits() — this test catches that.
-        let m = BinaryMatrix::new(&[1.0, 0.0, 0.0, 1.0, 0.0, 1.0], 3, 2)
-            .expect("valid 3x2 matrix");
+        let m = BinaryMatrix::new(&[1.0, 0.0, 0.0, 1.0, 0.0, 1.0], 3, 2).expect("valid 3x2 matrix");
         assert_eq!(m.as_bits().len(), 2); // 2 columns × 1 word each
         assert_eq!(m.as_bits()[0], 0b001); // column 0: row 0 set
         assert_eq!(m.as_bits()[1], 0b110); // column 1: rows 1,2 set

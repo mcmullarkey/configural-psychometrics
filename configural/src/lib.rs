@@ -12,6 +12,7 @@
 //! - [`pairmi`] — constructive ascent engine: depth-2 combn, depth≥3
 //!   expand.grid, canonical-set dedup, first-significant retention.
 //! - [`exhaustive`] — exhaustive lattice ascent via Apriori ordered extension.
+//! - [`cell_eval`] — cell evaluation + greedy antichain reduction (Wilson/point gates).
 //!
 //! ## What this crate does NOT provide
 //!
@@ -25,12 +26,14 @@
 //! Bit `(r, c)` lives at word `c*nwords + r/64`, bit `r%64`.
 
 pub mod bitset;
+pub mod cell_eval;
 pub mod error;
 pub mod exhaustive;
 pub mod matrix;
 pub mod pairmi;
 pub mod stats;
 
+pub use cell_eval::{evaluate_cell, CellOutput, CellRow, Criterion, Detail};
 pub use error::ConfiguralError;
 pub use exhaustive::{AscentResult, EmscStore};
 pub use matrix::BinaryMatrix;

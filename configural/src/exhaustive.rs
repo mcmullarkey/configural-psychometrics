@@ -192,6 +192,29 @@ pub fn ascend(
         evaluability[ti][0] = count;
     }
 
+    // Early stop check for depth 1: if depth-1 admissible count exceeds
+    // max_admissible_per_depth, stop immediately without exploring deeper.
+    if (d1_admis.len() as f64) > max_admissible_per_depth {
+        stopped_early = true;
+        stop_depth = Some(1);
+        return AscentResult {
+            store: EmscStore {
+                cfg_mask,
+                cfg_supp,
+                cfg_y1,
+                depth_end,
+                excl_mask,
+                n_targets,
+                z,
+                z2,
+            },
+            admissibility,
+            evaluability,
+            stopped_early,
+            stop_depth,
+        };
+    }
+
     // Step 6: Depths 2..=max_cardinality.
     // prev_bits holds the conjunction bitsets of the previous depth's configs.
     let mut prev_bits: Vec<u64> = Vec::new();
@@ -339,6 +362,26 @@ mod tests {
         BinaryMatrix::new(&data, 4, 4).unwrap()
     }
 
+    /// 2 vars × 5 obs: all 4 non-trivial observations share both variables.
+    /// Var 0: [1, 1, 1, 1, 0]
+    /// Var 1: [1, 1, 1, 1, 0]
+    ///
+    /// Observation indicators (packed, V=2 → 1 word each):
+    ///   Obs 0: [1,1] → 0b11 = 3
+    ///   Obs 1: [1,1] → 0b11 = 3
+    ///   Obs 2: [1,1] → 0b11 = 3
+    ///   Obs 3: [1,1] → 0b11 = 3
+    ///   Obs 4: [0,0] → 0b00 = 0
+    ///
+    /// With n_min=1: d1=4 (obs 0-3), d2=6 (all C(4,2) pairs admissible).
+    fn test_matrix_2x5() -> BinaryMatrix {
+        let data = [
+            1.0, 1.0, 1.0, 1.0, 0.0, // var 0
+            1.0, 1.0, 1.0, 1.0, 0.0, // var 1
+        ];
+        BinaryMatrix::new(&data, 2, 5).unwrap()
+    }
+
     /// Standard test parameters: 1 target [1,1,0,0], theta=0.3, n_min=1.
     fn run_ascend(n_min: u32, max_adm: f64) -> AscentResult {
         let m = test_matrix_4x4();
@@ -464,8 +507,13 @@ mod tests {
 
     #[test]
     fn early_stop_truncates_to_last_completed_depth() {
-        // max_admissible=2 → depth 2 produces 3 > 2 → stop.
-        let result = run_ascend(1, 2.0);
+        // Use 2×5 matrix: d1=4, d2=6 (all C(4,2) pairs admissible).
+        // max_admissible=5 → depth 1: 4 ≤ 5 (no stop), depth 2: 6 > 5 → stop.
+        let m = test_matrix_2x5();
+        let targets = vec![vec![1, 1]]; // target: vars 0,1
+        let thetas = vec![0.3];
+        let excludes = vec![None];
+        let result = ascend(&m, &targets, &thetas, 1, 0.05, 3, 5.0, &excludes);
         assert!(result.stopped_early);
         assert_eq!(result.stop_depth, Some(2));
         // Truncated to depth 1 (4 configs).
@@ -479,6 +527,20 @@ mod tests {
         let result = run_ascend(1, 1000.0);
         assert!(!result.stopped_early);
         assert_eq!(result.stop_depth, None);
+    }
+
+    #[test]
+    fn early_stop_at_depth1_with_zero_max_admissible() {
+        // max_admissible=0.0 → depth-1 has 4 admissible > 0.0 → stop at depth 1.
+        let result = run_ascend(1, 0.0);
+        assert!(result.stopped_early);
+        assert_eq!(result.stop_depth, Some(1));
+        // Depth-1 configs are stored (4 admissible observations).
+        assert_eq!(result.store.cfg_mask.len(), 4);
+        assert_eq!(result.store.depth_end.len(), 1);
+        assert_eq!(result.store.depth_end[0], 4);
+        // No depth-2 configs explored.
+        assert_eq!(result.admissibility[1], 0);
     }
 
     // ---- depth_end offsets ----
@@ -557,6 +619,17 @@ mod tests {
         //   AND(8, 12) = 8 → popcount = 1
         assert_eq!(store.cfg_y1[6], 0); // target 0
         assert_eq!(store.cfg_y1[7], 1); // target 1
+
+        // Depth-2 configs (indices 4-6, y1 at cfg_y1 indices 8-13):
+        // Config 4 {0,1}: AND(3,5)=1, y1[8]=AND(1,3)=1→popcount=1, y1[9]=AND(1,12)=0→popcount=0
+        assert_eq!(store.cfg_y1[8], 1);
+        assert_eq!(store.cfg_y1[9], 0);
+        // Config 5 {0,2}: AND(3,6)=2, y1[10]=AND(2,3)=2→popcount=1, y1[11]=AND(2,12)=0→popcount=0
+        assert_eq!(store.cfg_y1[10], 1);
+        assert_eq!(store.cfg_y1[11], 0);
+        // Config 6 {1,2}: AND(5,6)=4, y1[12]=AND(4,3)=0→popcount=0, y1[13]=AND(4,12)=4→popcount=1
+        assert_eq!(store.cfg_y1[12], 0);
+        assert_eq!(store.cfg_y1[13], 1);
     }
 
     // ---- Exclusion masks ----

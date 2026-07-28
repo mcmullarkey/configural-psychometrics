@@ -29,6 +29,7 @@
 use crate::bitset::{and_popcount, max_element, pack_column, popcount};
 use crate::matrix::BinaryMatrix;
 use crate::stats::z_score;
+use rayon::prelude::*;
 
 /// Store of all admissible configurations found during ascent.
 pub struct EmscStore {
@@ -62,6 +63,22 @@ pub struct AscentResult {
     pub stopped_early: bool,
     /// Depth at which early stop occurred (if any).
     pub stop_depth: Option<u32>,
+}
+
+/// Per-parent extension results collected from parallel tasks.
+///
+/// Each parent config `i` independently extends with admissible observations.
+/// Results are merged in parent order after the parallel loop to preserve
+/// depth-major storage.
+struct ParentExtension {
+    /// Vocabulary masks for admissible configs from this parent.
+    masks: Vec<u64>,
+    /// Support counts for admissible configs from this parent.
+    supps: Vec<u32>,
+    /// Config-major y1 counts: `y1s[g * n_targets + k]`.
+    y1s: Vec<u32>,
+    /// Conjunction bitsets for the next depth (empty if `!keep_bits`).
+    bits: Vec<u64>,
 }
 
 /// Run the exhaustive ascent.
@@ -236,59 +253,99 @@ pub fn ascend(
             break;
         }
 
+        // Pre-reserve store vectors for this depth's worst case.
+        let worst_case = n_prev * d1_admis.len();
+        cfg_mask.reserve(worst_case);
+        cfg_supp.reserve(worst_case);
+        cfg_y1.reserve(worst_case * n_targets as usize);
+
         let keep_bits = d < max_cardinality;
         let mut cur_bits: Vec<u64> = Vec::new();
-        let mut _n_cands: u64 = 0;
         let mut n_admis: u64 = 0;
-        let mut scratch = vec![0u64; nwords];
 
-        for i in 0..n_prev {
-            let gid = lo + i;
-            let mask_i = cfg_mask[gid];
-            let max_j = max_element(mask_i).unwrap(); // highest set bit
+        // Parallelize the outer loop over parent configs.
+        // Each parent config i is independent — they extend different parents.
+        // Per-thread scratch buffer created inside the closure.
+        // Early stop check deferred to after the parallel loop.
+        let cfg_mask_ref = &cfg_mask;
+        let prev_bits_ref = &prev_bits;
+        let ind_bits_ref = &ind_bits;
+        let tgt_bits_ref = &tgt_bits;
+        let d1_admis_ref = &d1_admis;
 
-            for &j in &d1_admis {
-                if j as u32 <= max_j {
-                    continue;
-                }
-                _n_cands += 1;
+        let results: Vec<ParentExtension> = (0..n_prev)
+            .into_par_iter()
+            .map(|i| {
+                let gid = lo + i;
+                let mask_i = cfg_mask_ref[gid];
+                let max_j = max_element(mask_i).unwrap(); // highest set bit
 
-                // AND parent bits with observation j bits.
-                let mut supp = 0u32;
-                for w in 0..nwords {
-                    scratch[w] = prev_bits[i * nwords + w] & ind_bits[j * nwords + w];
-                    supp += popcount(scratch[w]);
-                }
+                // Per-thread scratch — no sharing across parent configs.
+                let mut scratch = vec![0u64; nwords];
+                let mut masks = Vec::new();
+                let mut supps = Vec::new();
+                let mut y1s = Vec::new();
+                let mut bits: Vec<u64> = Vec::new();
 
-                if supp < n_min {
-                    continue;
-                }
-                n_admis += 1;
+                for &j in d1_admis_ref {
+                    if j as u32 <= max_j {
+                        continue;
+                    }
 
-                cfg_mask.push(mask_i | (1u64 << j));
-                cfg_supp.push(supp);
-                for k in 0..n_targets as usize {
-                    let y1 = and_popcount(&scratch, &tgt_bits[k * nwords..(k + 1) * nwords]);
-                    cfg_y1.push(y1);
-                }
-
-                if keep_bits {
+                    // AND parent bits with observation j bits.
+                    let mut supp = 0u32;
                     for w in 0..nwords {
-                        cur_bits.push(scratch[w]);
+                        scratch[w] = prev_bits_ref[i * nwords + w] & ind_bits_ref[j * nwords + w];
+                        supp += popcount(scratch[w]);
+                    }
+
+                    if supp < n_min {
+                        continue;
+                    }
+
+                    masks.push(mask_i | (1u64 << j));
+                    supps.push(supp);
+                    for k in 0..n_targets as usize {
+                        let y1 =
+                            and_popcount(&scratch, &tgt_bits_ref[k * nwords..(k + 1) * nwords]);
+                        y1s.push(y1);
+                    }
+
+                    if keep_bits {
+                        for w in 0..nwords {
+                            bits.push(scratch[w]);
+                        }
                     }
                 }
-            }
 
-            if (n_admis as f64) > max_admissible_per_depth {
-                stopped_early = true;
-                stop_depth = Some(d);
-                // Truncate to last completed depth — no partial configs.
-                let last = *depth_end.last().unwrap() as usize;
-                cfg_mask.truncate(last);
-                cfg_supp.truncate(last);
-                cfg_y1.truncate(last * n_targets as usize);
-                break;
-            }
+                ParentExtension {
+                    masks,
+                    supps,
+                    y1s,
+                    bits,
+                }
+            })
+            .collect();
+
+        // Merge results in order (preserves depth-major storage).
+        for ext in &results {
+            cfg_mask.extend_from_slice(&ext.masks);
+            cfg_supp.extend_from_slice(&ext.supps);
+            cfg_y1.extend_from_slice(&ext.y1s);
+            cur_bits.extend_from_slice(&ext.bits);
+            n_admis += ext.masks.len() as u64;
+        }
+
+        // Early stop check — done after the parallel loop, not inside it.
+        if (n_admis as f64) > max_admissible_per_depth {
+            stopped_early = true;
+            stop_depth = Some(d);
+            // Truncate to last completed depth — no partial configs.
+            let last = *depth_end.last().unwrap() as usize;
+            cfg_mask.truncate(last);
+            cfg_supp.truncate(last);
+            cfg_y1.truncate(last * n_targets as usize);
+            break;
         }
 
         if stopped_early {

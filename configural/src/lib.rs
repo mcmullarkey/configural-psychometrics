@@ -11,6 +11,7 @@
 //!   information, G-test, chi-squared survival function, normal quantile.
 //! - [`pairmi`] — constructive ascent engine: depth-2 combn, depth≥3
 //!   expand.grid, canonical-set dedup, first-significant retention.
+//! - [`exhaustive`] — exhaustive lattice ascent via Apriori ordered extension.
 //!
 //! ## What this crate does NOT provide
 //!
@@ -25,11 +26,13 @@
 
 pub mod bitset;
 pub mod error;
+pub mod exhaustive;
 pub mod matrix;
 pub mod pairmi;
 pub mod stats;
 
 pub use error::ConfiguralError;
+pub use exhaustive::{AscentResult, EmscStore};
 pub use matrix::BinaryMatrix;
 pub use pairmi::{DepthStats, EvaluationMode, PairMiEngine, PairMiResultRow};
 pub use stats::GTestResult;

@@ -253,9 +253,9 @@ impl PairMiEngine {
                         &orig_bits[j * w..(j + 1) * w],
                     );
                     let mi = mi_2x2(n11 as f64, orig_pop[i] as f64, orig_pop[j] as f64, n_f);
-                    let p = g_test_p(n11 as f64, n_f, mi);
+                    let pval = g_test_p(n11 as f64, n_f, mi);
 
-                    if should_keep(mode, mi, p) {
+                    if should_keep(mode, mi, pval) {
                         // Materialize conjunction: a_bits & b_bits.
                         let off = self.set_bits.len();
                         self.set_bits.resize(off + w, 0);
@@ -270,7 +270,7 @@ impl PairMiEngine {
                         self.set_parent.push(j as u32);
                         self.set_mi.push(mi);
                         self.set_relmi.push(0.0);
-                        self.set_p.push(p);
+                        self.set_p.push(pval);
                         kept += 1;
                     }
                 }
@@ -317,9 +317,9 @@ impl PairMiEngine {
 
                     let n11 = and_popcount(&scratch, &orig_bits[j * w..(j + 1) * w]);
                     let mi = mi_2x2(n11 as f64, orig_pop[j] as f64, ppop as f64, n_f);
-                    let p = g_test_p(n11 as f64, n_f, mi);
+                    let pval = g_test_p(n11 as f64, n_f, mi);
 
-                    if should_keep(mode, mi, p) {
+                    if should_keep(mode, mi, pval) {
                         // Materialize conjunction: scratch & orig_bits[j].
                         let off = self.set_bits.len();
                         self.set_bits.resize(off + w, 0);
@@ -333,7 +333,7 @@ impl PairMiEngine {
                         self.set_parent.push(p as u32);
                         self.set_mi.push(mi);
                         self.set_relmi.push(mi - pmi);
-                        self.set_p.push(p);
+                        self.set_p.push(pval);
                         seen_kept.insert(vm);
                         kept += 1;
                     }
@@ -609,6 +609,29 @@ mod tests {
         assert_eq!(g_test_p(0.0, 10.0, 0.693), 1.0);
         // n11 = 5, n = 10, mi = -1.0 → jc = 5, g = -10 → p = 1.0.
         assert_eq!(g_test_p(5.0, 10.0, -1.0), 1.0);
+    }
+
+    #[test]
+    fn g_test_p_flip_correction_n11_exceeds_half() {
+        // n11=8, n=10 → n11 > n/2 → flip: jc = min(8, 2) = 2.
+        // mi = mi_2x2(8, 8, 8, 10) ≈ 0.5004.
+        // With flip:    g = 2*2*0.5004  ≈ 2.0,  p ≈ 0.117 (not significant).
+        // Without flip: g = 2*8*0.5004  ≈ 8.0,  p ≈ 0.003 (significant).
+        //
+        // If g_test_p used `jc = n11` (no flip), p would be < 0.05 and
+        // this test would fail on the `p > 0.05` assertion.
+        let mi = mi_2x2(8.0, 8.0, 8.0, 10.0);
+        let p = g_test_p(8.0, 10.0, mi);
+        assert!(p > 0.05, "with flip: p should be > 0.05, got {p}");
+        assert!(p < 0.2, "with flip: p should be < 0.2, got {p}");
+
+        // Verify the counterfactual: without flip, p < 0.05.
+        let g_noflip = 2.0 * 8.0 * mi;
+        let p_noflip = chi2_sf_df1(g_noflip);
+        assert!(
+            p_noflip < 0.05,
+            "without flip: p should be < 0.05, got {p_noflip}"
+        );
     }
 
     #[test]

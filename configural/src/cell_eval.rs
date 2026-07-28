@@ -99,9 +99,9 @@ pub struct CellOutput {
 /// - `criterion` — sufficiency gate mode (Wilson or Point)
 /// - `detail` — output verbosity (Full or Count)
 ///
-/// # Panics
+/// # Exclusion mask default
 ///
-/// Panics if `target_k >= n_targets` (index out of bounds in `cfg_y1`).
+/// If `target_k >= n_targets`, exclusion mask defaults to 0 (no exclusion).
 #[must_use]
 pub fn evaluate_cell(
     store: &EmscStore,
@@ -653,5 +653,129 @@ mod tests {
         let out = evaluate_cell(&store, 0, 0.3, Criterion::Wilson, Detail::Full);
         assert_eq!(out.n_sufficient, 0);
         assert!(out.rows.is_empty());
+    }
+
+    // ---- Equal-cardinality antichain: disjoint configs both minimal ----
+
+    #[test]
+    fn equal_cardinality_disjoint_both_minimal() {
+        // Two card=2 configs that are NOT subsets of each other (disjoint).
+        // mask=3 ({0,1}) and mask=12 ({2,3}) — both card=2, no shared bits.
+        // Neither is a subset of the other → both should be minimal.
+        let store = crate::exhaustive::EmscStore {
+            cfg_mask: vec![0b0011, 0b1100],
+            cfg_supp: vec![2, 2],
+            cfg_y1: vec![2, 2],
+            depth_end: vec![2],
+            excl_mask: vec![0],
+            n_targets: 1,
+            z: 1.96,
+            z2: 3.8416,
+        };
+        let out = evaluate_cell(&store, 0, 0.0, Criterion::Point, Detail::Full);
+
+        assert_eq!(out.n_sufficient, 2, "both configs should be sufficient");
+        assert_eq!(out.rows.len(), 2, "both should be emitted in Full mode");
+
+        // Both should be minimal — neither is a subset of the other
+        for row in &out.rows {
+            assert!(
+                row.minimal,
+                "disjoint equal-cardinality config {:?} should be minimal",
+                row.set_idx
+            );
+        }
+    }
+
+    // ---- Equal-cardinality antichain: duplicate → later non-minimal ----
+
+    #[test]
+    fn equal_cardinality_duplicate_later_non_minimal() {
+        // Two identical card=2 configs (same mask=3, {0,1}).
+        // The second is a subset of the first (acc_mask & m == acc_mask when equal).
+        // First should be minimal=true, second should be minimal=false.
+        let store = crate::exhaustive::EmscStore {
+            cfg_mask: vec![0b0011, 0b0011],
+            cfg_supp: vec![2, 2],
+            cfg_y1: vec![2, 2],
+            depth_end: vec![2],
+            excl_mask: vec![0],
+            n_targets: 1,
+            z: 1.96,
+            z2: 3.8416,
+        };
+        let out = evaluate_cell(&store, 0, 0.0, Criterion::Point, Detail::Full);
+
+        assert_eq!(out.n_sufficient, 2, "both configs should be sufficient");
+        assert_eq!(out.rows.len(), 2, "both should be emitted in Full mode");
+
+        // First config should be minimal, second should NOT
+        assert!(
+            out.rows[0].minimal,
+            "first duplicate config should be minimal"
+        );
+        assert!(
+            !out.rows[1].minimal,
+            "second duplicate config should be non-minimal (subset of first)"
+        );
+    }
+
+    // ---- Multi-target y1 indexing: same config, different target_k ----
+
+    #[test]
+    fn multi_target_y1_indexing_differs_by_target() {
+        // Build a store with n_targets=2, distinct targets.
+        // target 0 = [1,1,0,0] (obs 0,1) → packed = 0b0011 = 3
+        // target 1 = [0,0,1,1] (obs 2,3) → packed = 0b1100 = 12
+        //
+        // obs 0 (mask=1, packed=3, supp=2):
+        //   y1 for target 0 = AND(3, 3) = 3 → popcount = 2
+        //   y1 for target 1 = AND(3, 12) = 0 → popcount = 0
+        //
+        // This proves the config-major indexing cfg_y1[g * n_targets + target_k]
+        // is correct: the same config g yields different y1 for different target_k.
+        let m = test_matrix_4x4();
+        let targets = vec![
+            vec![1, 1, 0, 0], // target 0: obs 0,1
+            vec![0, 0, 1, 1], // target 1: obs 2,3
+        ];
+        let thetas = vec![0.3];
+        let excludes = vec![None, None];
+        let store = ascend(&m, &targets, &thetas, 1, 0.05, 3, 1000.0, &excludes).store;
+
+        assert_eq!(store.n_targets, 2, "store should have 2 targets");
+
+        // Evaluate with target_k=0 and target_k=1
+        let out0 = evaluate_cell(&store, 0, 0.0, Criterion::Point, Detail::Full);
+        let out1 = evaluate_cell(&store, 1, 0.0, Criterion::Point, Detail::Full);
+
+        // Find obs 0 (set_idx=[0]) in both outputs
+        let row0 = out0
+            .rows
+            .iter()
+            .find(|r| r.set_idx == vec![0])
+            .expect("obs 0 should be in target 0 output");
+        let row1 = out1
+            .rows
+            .iter()
+            .find(|r| r.set_idx == vec![0])
+            .expect("obs 0 should be in target 1 output");
+
+        // n_set should be the same (support is target-independent)
+        assert_eq!(row0.n_set, row1.n_set, "n_set should be target-independent");
+
+        // n_set_y1 should DIFFER — this is the key assertion
+        assert_eq!(
+            row0.n_set_y1, 2,
+            "obs 0 y1 for target 0 (obs 0,1) should be 2"
+        );
+        assert_eq!(
+            row1.n_set_y1, 0,
+            "obs 0 y1 for target 1 (obs 2,3) should be 0"
+        );
+        assert_ne!(
+            row0.n_set_y1, row1.n_set_y1,
+            "n_set_y1 must differ between targets — proves config-major indexing"
+        );
     }
 }

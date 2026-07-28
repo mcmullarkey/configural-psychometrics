@@ -17,7 +17,8 @@
 //! - [`satisfaction`] — satisfaction matrix primitive (S[p][k] = all elements
 //!   in member k present in row p).
 //! - [`coverage`] — coverage: share of cases satisfying ≥1 antichain member.
-//! - [`diagnostics`] — antichain-level diagnostics (necessity index + summary).
+//! - [`diagnostics`] — antichain-level diagnostics (necessity index,
+//!   dispensability index).
 //!
 //! ## What this crate does NOT provide
 //!

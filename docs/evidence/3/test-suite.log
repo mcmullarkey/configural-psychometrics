@@ -1,0 +1,89 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src/lib.rs (target/debug/deps/configural-a3755c22848da735)
+
+running 50 tests
+test matrix::tests::equality_semantics ... ok
+test matrix::tests::negative_dimension_mismatch ... ok
+test matrix::tests::as_bits_column_major_layout ... ok
+test matrix::tests::negative_value_infinity ... ok
+test matrix::tests::negative_value_half ... ok
+test matrix::tests::negative_value_nan ... ok
+test matrix::tests::negative_value_2 ... ok
+test matrix::tests::negative_zero_passes ... ok
+test matrix::tests::negative_empty_matrix ... ok
+test matrix::tests::positive_2x2_roundtrip ... ok
+test stats::tests::chi2_basic ... ok
+test stats::tests::chi2_g_zero ... ok
+test matrix::tests::negative_vocabulary_too_large ... ok
+test stats::tests::g_test_mi_zero ... ok
+test stats::tests::g_test_n11_equal_half ... ok
+test stats::tests::chi2_monotone_decreasing ... ok
+test stats::tests::chi2_negative_panics - should panic ... ok
+test stats::tests::g_test_n11_greater_than_half ... ok
+test stats::tests::g_test_n11_less_than_half ... ok
+test stats::tests::gtest_result_equality ... ok
+test stats::tests::g_test_result_fields ... ok
+test stats::tests::mi_all_zero ... ok
+test stats::tests::mi_independence_zero ... ok
+test stats::tests::mi_basic ... ok
+test stats::tests::mi_subnormal_finite ... ok
+test stats::tests::qnorm_001 ... ok
+test stats::tests::qnorm_025 ... ok
+test stats::tests::qnorm_975 ... ok
+test stats::tests::qnorm_median ... ok
+test stats::tests::qnorm_999 ... ok
+test stats::tests::qnorm_p_negative_panics - should panic ... ok
+test stats::tests::qnorm_p_one_panics - should panic ... ok
+test stats::tests::qnorm_p_above_one_panics - should panic ... ok
+test stats::tests::qnorm_symmetry ... ok
+test stats::tests::safe_term_m2_zero ... ok
+test stats::tests::safe_term_all_positive ... ok
+test stats::tests::qnorm_p_zero_panics - should panic ... ok
+test stats::tests::safe_term_all_zero ... ok
+test stats::tests::safe_term_cell_zero ... ok
+test stats::tests::safe_term_m1_zero ... ok
+test stats::tests::safe_term_subnormal ... ok
+test stats::tests::safe_term_n_zero ... ok
+test stats::tests::wilson_basic ... ok
+test stats::tests::wilson_n_zero_panics - should panic ... ok
+test stats::tests::wilson_p_one ... ok
+test stats::tests::wilson_p_zero ... ok
+test stats::tests::z_score_alpha_zero_panics - should panic ... ok
+test stats::tests::z_score_01 ... ok
+test stats::tests::z_score_05 ... ok
+test stats::tests::z_score_alpha_one_panics - should panic ... ok
+
+test result: ok. 50 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/smoke.rs (target/debug/deps/smoke-0d6103af3536e68d)
+
+running 2 tests
+test public_api_error_visibility ... ok
+test public_api_smoke ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/stats_parity.rs (target/debug/deps/stats_parity-c88276b2e404f5cd)
+
+running 5 tests
+test chi2_parity ... ok
+test gtest_parity ... ok
+test mi_parity ... ok
+test qnorm_parity ... ok
+test wilson_parity ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests configural
+
+running 7 tests
+test src/stats.rs - stats::g_test (line 163) ... ok
+test src/stats.rs - stats::normal_inverse_cdf (line 191) ... ok
+test src/stats.rs - stats::wilson_lower (line 50) ... ok
+test src/stats.rs - stats::mi_2x2 (line 107) ... ok
+test src/stats.rs - stats::z_score (line 349) ... ok
+test src/stats.rs - stats::safe_term (line 75) ... ok
+test src/stats.rs - stats::chi2_sf_df1 (line 134) ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+

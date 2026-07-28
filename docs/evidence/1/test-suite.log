@@ -1,0 +1,16 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (target/debug/deps/configural-ea2d5bb835c7861f)
+
+running 9 tests
+test matrix::tests::negative_dimension_mismatch ... ok
+test matrix::tests::negative_empty_matrix ... ok
+test matrix::tests::negative_value_2 ... ok
+test matrix::tests::negative_value_half ... ok
+test matrix::tests::negative_value_nan ... ok
+test matrix::tests::negative_value_infinity ... ok
+test matrix::tests::negative_zero_passes ... ok
+test matrix::tests::positive_2x2_roundtrip ... ok
+test matrix::tests::negative_vocabulary_too_large ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

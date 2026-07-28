@@ -1,3 +1,172 @@
+//! Binary matrix with column-major packed-bit storage.
+//!
+//! See [`crate`] docs for the crate-level overview.
+
+/// A validated binary matrix stored in column-major packed `u64` words.
+///
+/// ## Construction
+///
+/// [`BinaryMatrix::new`] takes a flat `&[f64]` slice in **row-major** order
+/// (element `(r, c)` at index `r * n_cols + c`) and validates:
+///
+/// 1. `data.len() == n_rows * n_cols` — otherwise [`DimensionMismatch`].
+/// 2. At least one row and one column — otherwise [`EmptyMatrix`].
+/// 3. `n_rows <= 64` (vocabulary limit) — otherwise [`VocabularyTooLarge`].
+/// 4. Every value is exactly `0.0` or `1.0` — otherwise [`NonBinaryValue`].
+///    (`-0.0` passes because `-0.0 == 0.0` per IEEE 754.)
+///
+/// ## Storage layout
+///
+/// Bits are packed column-major into `Vec<u64>`. For a matrix with `n_rows`
+/// rows and `n_cols` columns:
+///
+/// - `nwords = (n_rows + 63) / 64` — words per column.
+/// - Total storage: `n_cols * nwords` words.
+/// - Bit `(r, c)` lives at word `c * nwords + r / 64`, bit `r % 64`.
+///
+/// With `n_rows <= 64`, `nwords == 1`, so each column is exactly one `u64`.
+///
+/// [`DimensionMismatch`]: crate::ConfiguralError::DimensionMismatch
+/// [`EmptyMatrix`]: crate::ConfiguralError::EmptyMatrix
+/// [`VocabularyTooLarge`]: crate::ConfiguralError::VocabularyTooLarge
+/// [`NonBinaryValue`]: crate::ConfiguralError::NonBinaryValue
+#[derive(Debug, Clone)]
+pub struct BinaryMatrix {
+    /// Packed column-major bits. See type docs for layout.
+    bits: Vec<u64>,
+    /// Number of rows (vocabulary size, V).
+    n_rows: usize,
+    /// Number of columns (observations).
+    n_cols: usize,
+    /// Words per column: `(n_rows + 63) / 64`.
+    nwords: usize,
+}
+
+impl BinaryMatrix {
+    /// Validate and pack a flat `&[f64]` into a column-major binary matrix.
+    ///
+    /// The input slice is **row-major**: element `(r, c)` is at
+    /// `data[r * n_cols + c]`. Values must be exactly `0.0` or `1.0`
+    /// (`-0.0` is accepted because `-0.0 == 0.0`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfiguralError`] if:
+    /// - `data.len() != n_rows * n_cols` ([`DimensionMismatch`])
+    /// - `n_rows == 0` or `n_cols == 0` ([`EmptyMatrix`])
+    /// - `n_rows > 64` ([`VocabularyTooLarge`])
+    /// - Any value is not `0.0` or `1.0` ([`NonBinaryValue`])
+    ///
+    /// [`DimensionMismatch`]: crate::ConfiguralError::DimensionMismatch
+    /// [`EmptyMatrix`]: crate::ConfiguralError::EmptyMatrix
+    /// [`VocabularyTooLarge`]: crate::ConfiguralError::VocabularyTooLarge
+    /// [`NonBinaryValue`]: crate::ConfiguralError::NonBinaryValue
+    pub fn new(data: &[f64], n_rows: usize, n_cols: usize) -> Result<Self, crate::ConfiguralError> {
+        // 1. Dimension check — must come first so we can safely index.
+        let expected = n_rows.saturating_mul(n_cols);
+        if data.len() != expected {
+            return Err(crate::ConfiguralError::DimensionMismatch {
+                expected,
+                got: data.len(),
+            });
+        }
+
+        // 2. Non-empty check.
+        if n_rows == 0 || n_cols == 0 {
+            return Err(crate::ConfiguralError::EmptyMatrix);
+        }
+
+        // 3. Vocabulary limit — V = n_rows (original variables).
+        const MAX_VOCAB: usize = 64;
+        if n_rows > MAX_VOCAB {
+            return Err(crate::ConfiguralError::VocabularyTooLarge {
+                got: n_rows,
+                max: MAX_VOCAB,
+            });
+        }
+
+        // 4. Validate values and pack into column-major u64 words.
+        let nwords = n_rows.div_ceil(64);
+        let mut bits = vec![0u64; n_cols * nwords];
+
+        for r in 0..n_rows {
+            for c in 0..n_cols {
+                let idx = r * n_cols + c;
+                let value = data[idx];
+                // -0.0 == 0.0 per IEEE 754, so this accepts -0.0.
+                // NaN and Inf fail both comparisons (they are not == 0.0
+                // and not == 1.0).
+                let is_one = value == 1.0;
+                let is_zero = value == 0.0;
+                if !is_one && !is_zero {
+                    return Err(crate::ConfiguralError::NonBinaryValue {
+                        row: r,
+                        col: c,
+                        value,
+                    });
+                }
+                if is_one {
+                    let word = c * nwords + r / 64;
+                    let bit = r % 64;
+                    bits[word] |= 1u64 << bit;
+                }
+            }
+        }
+
+        Ok(Self {
+            bits,
+            n_rows,
+            n_cols,
+            nwords,
+        })
+    }
+
+    /// Number of rows (vocabulary size, V).
+    #[must_use]
+    pub const fn n_rows(&self) -> usize {
+        self.n_rows
+    }
+
+    /// Number of columns (observations).
+    #[must_use]
+    pub const fn n_cols(&self) -> usize {
+        self.n_cols
+    }
+
+    /// Retrieve the bit at `(row, col)`.
+    ///
+    /// Returns `true` if the value was `1.0`, `false` if `0.0`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `row >= n_rows` or `col >= n_cols`.
+    #[must_use]
+    pub fn get(&self, row: usize, col: usize) -> bool {
+        assert!(
+            row < self.n_rows,
+            "row {row} out of bounds (n_rows = {})",
+            self.n_rows
+        );
+        assert!(
+            col < self.n_cols,
+            "col {col} out of bounds (n_cols = {})",
+            self.n_cols
+        );
+        let word = col * self.nwords + row / 64;
+        let bit = row % 64;
+        (self.bits[word] >> bit) & 1 == 1
+    }
+
+    /// Raw column-major packed storage.
+    ///
+    /// Returns the `Vec<u64>` backing array. Column `j` occupies words
+    /// `[j * nwords, (j + 1) * nwords)`.
+    #[must_use]
+    pub fn as_bits(&self) -> &[u64] {
+        &self.bits
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{BinaryMatrix, ConfiguralError};

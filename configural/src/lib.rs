@@ -7,10 +7,11 @@
 //!
 //! - [`BinaryMatrix`] — validates 0/1 input and packs into column-major
 //!   `u64` words (V <= 64 variables per column).
+//! - [`stats`] — statistical primitives: Wilson score lower bound, mutual
+//!   information, G-test, chi-squared survival function, normal quantile.
 //!
 //! ## What this crate does NOT provide
 //!
-//! - Statistical computation (mutual information, G-squared, etc.)
 //! - File I/O or serialization
 //! - R/C++ bindings
 //!

@@ -84,7 +84,10 @@ pub struct Cell {
 /// Filters to `minimal == true` rows only, preserving 0-based `set_idx`
 /// and copying pre-computed stats directly.
 #[must_use]
-pub fn from_exhaustive(output: &CellOutput, meta: CellMeta) -> Cell {
+pub fn from_exhaustive(output: &CellOutput, mut meta: CellMeta) -> Cell {
+    // Source tag is set by the adapter, not the caller — unfalsifiable.
+    meta.source = CellSource::Exhaustive;
+
     let mut members = Vec::new();
     let mut cprob = Vec::new();
     let mut wl = Vec::new();
@@ -124,7 +127,10 @@ pub fn from_exhaustive(output: &CellOutput, meta: CellMeta) -> Cell {
 /// - `alpha` — significance level for Wilson z-score
 /// - `meta` — per-cell metadata
 #[must_use]
-pub fn from_pairmi(engine: &PairMiEngine, target: &[u8], alpha: f64, meta: CellMeta) -> Cell {
+pub fn from_pairmi(engine: &PairMiEngine, target: &[u8], alpha: f64, mut meta: CellMeta) -> Cell {
+    // Source tag is set by the adapter, not the caller — unfalsifiable.
+    meta.source = CellSource::MiRestricted;
+
     let results = engine.results();
     let indicators = engine.indicators(); // nsets × N (set-major)
     let z = z_score(alpha);
@@ -649,5 +655,43 @@ mod tests {
         assert_eq!(cell.meta.criterion, Criterion::Wilson);
         assert!((cell.meta.threshold - 0.3).abs() < 1e-15);
         assert_eq!(cell.meta.key, "target1_theta0.3_wilson");
+    }
+
+    // ---- Source tag unfalsifiability ----
+    //
+    // AC #7: "CellSource enum — set by adapter, not caller."
+    // A caller may pass a wrong source in meta; the adapter MUST override it.
+    // Negative case: from_pairmi with meta.source = Exhaustive must NOT yield
+    // a Cell with source == Exhaustive.
+
+    #[test]
+    fn from_exhaustive_overrides_wrong_source() {
+        let empty_output = CellOutput {
+            rows: vec![],
+            n_sufficient: 0,
+        };
+        // Caller lies — claims MiRestricted for an exhaustive adapter.
+        let meta = dummy_meta(CellSource::MiRestricted);
+        let cell = from_exhaustive(&empty_output, meta);
+        assert_eq!(
+            cell.meta.source,
+            CellSource::Exhaustive,
+            "from_exhaustive must override caller-provided source"
+        );
+    }
+
+    #[test]
+    fn from_pairmi_overrides_wrong_source() {
+        let m = identical_matrix_3x10();
+        let engine = PairMiEngine::create(&m).unwrap();
+        let target = vec![1u8; 10];
+        // Caller lies — claims Exhaustive for a pairmi adapter.
+        let meta = dummy_meta(CellSource::Exhaustive);
+        let cell = from_pairmi(&engine, &target, 0.05, meta);
+        assert_eq!(
+            cell.meta.source,
+            CellSource::MiRestricted,
+            "from_pairmi must override caller-provided source"
+        );
     }
 }

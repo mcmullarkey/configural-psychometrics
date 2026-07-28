@@ -17,6 +17,7 @@
 //! - [`satisfaction`] — satisfaction matrix primitive (S[p][k] = all elements
 //!   in member k present in row p).
 //! - [`coverage`] — coverage: share of cases satisfying ≥1 antichain member.
+//! - [`diagnostics`] — antichain-level diagnostics (necessity index + summary).
 //!
 //! ## What this crate does NOT provide
 //!
@@ -33,6 +34,7 @@ pub mod bitset;
 pub mod cell;
 pub mod cell_eval;
 pub mod coverage;
+pub mod diagnostics;
 pub mod error;
 pub mod exhaustive;
 pub mod matrix;
